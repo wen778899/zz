@@ -34,7 +34,7 @@ echo -e "\033[1;36m>>> [2/5] 安装必要依赖...\033[0m"
 pkg install -y python nodejs aria2 ffmpeg git vim curl wget tar openssl-tool build-essential libffi termux-tools
 
 echo -e "\033[1;36m>>> [3/5] 安装 Python 库...\033[0m"
-# Termux 中禁止手动升级 pip，由 pkg 管理，此处已移除 pip upgrade 命令
+# Termux 禁止使用 pip 升级自身，这里只安装依赖包
 if [ -f "bot/requirements.txt" ]; then
     pip install -r bot/requirements.txt
 else
@@ -116,11 +116,14 @@ user-agent=Mozilla/5.0
 EOT
 fi
 
+# --- 5. 赋予脚本执行权限 ---
+echo "🔧 设置脚本权限..."
+chmod +x start.sh update.sh monitor.sh
+
 echo "--------------------------------------------------------"
 echo "✅ Termux 环境部署完成！"
 echo "--------------------------------------------------------"
 echo "📂 你的配置文件位于: $HOME/.env"
-echo "   (在项目目录的上级，更新代码不会影响它)"
 echo "--------------------------------------------------------"
 echo "⚠️  重要提示 (Android 12+):"
 echo "   为了防止后台进程被杀，请务必执行以下 ADB 命令(在电脑上)或使用无线调试:"
