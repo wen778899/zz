@@ -2,13 +2,14 @@
 import logging
 import asyncio
 import sys
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from telegram.request import HTTPXRequest
 from .config import BOT_TOKEN, validate_config
 from .handlers import (
     start, trigger_stream, download_command, handle_message, 
     send_usage_stats, global_error_handler, monitor_services_job,
-    add_key_command, del_key_command, list_keys_command
+    add_key_command, del_key_command, list_keys_command,
+    browser_command, browser_callback_handler # 新增 handler
 )
 
 # 配置日志到标准输出
@@ -51,13 +52,18 @@ if __name__ == '__main__':
         app.add_handler(CommandHandler("stream", trigger_stream))
         app.add_handler(CommandHandler("dl", download_command))
         app.add_handler(CommandHandler("usage", send_usage_stats))
+        app.add_handler(CommandHandler("ls", browser_command)) # 新增 /ls
         
         # 新增推流密钥管理命令
         app.add_handler(CommandHandler("addkey", add_key_command))
         app.add_handler(CommandHandler("delkey", del_key_command))
         app.add_handler(CommandHandler("listkeys", list_keys_command))
         
-        # 4. 注册消息处理器
+        # 4. 注册 Callback (按钮点击) 处理器
+        # 正则匹配 br: 开头的 callback
+        app.add_handler(CallbackQueryHandler(browser_callback_handler, pattern="^br:"))
+
+        # 5. 注册消息处理器
         app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
         
         print("✅ 机器人连接成功！正在监听消息...")

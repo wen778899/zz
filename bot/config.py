@@ -12,8 +12,6 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 
 # 推流基础地址 (Base URL)
-# 格式推荐: rtmp://hostname/app/
-# 实际推流地址 = TG_RTMP_URL_ENV + StreamKey
 TG_RTMP_URL_ENV = os.getenv("TG_RTMP_URL")
 
 # --- GitHub 多账号逻辑 ---
@@ -47,11 +45,11 @@ ALIST_DOMAIN = os.getenv("ALIST_DOMAIN")
 ARIA2_RPC_SECRET = os.getenv("ARIA2_RPC_SECRET")
 HOME_DIR = HOME
 
-# 主菜单布局 (优化版)
+# 主菜单布局 (已更新)
 MAIN_MENU = [
-    ["📊 状态", "📥 任务", "☁️ 隧道"],
-    ["⬇️ 下载", "📺 推流设置", "⚙️ 管理"],
-    ["📝 日志", "❓ 帮助"]
+    ["📂 文件", "📊 状态", "📥 任务"], # 新增 "文件" 入口
+    ["⬇️ 下载", "☁️ 隧道", "⚙️ 管理"],
+    ["📺 推流设置", "📝 日志", "❓ 帮助"]
 ]
 
 # 管理子菜单
