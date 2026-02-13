@@ -34,7 +34,7 @@ echo -e "\033[1;36m>>> [2/5] 安装必要依赖...\033[0m"
 pkg install -y python nodejs aria2 ffmpeg git vim curl wget tar openssl-tool build-essential libffi termux-tools
 
 echo -e "\033[1;36m>>> [3/5] 安装 Python 库...\033[0m"
-pip install --upgrade pip
+# Termux 中禁止手动升级 pip，由 pkg 管理，此处已移除 pip upgrade 命令
 if [ -f "bot/requirements.txt" ]; then
     pip install -r bot/requirements.txt
 else
