@@ -12,25 +12,18 @@
 
 ## ⚠️ 关键设置 (Android 12+)
 
-Android 12 及更高版本有名为 "Phantom Process Killer" 的机制，会在后台杀掉 Termux 的子进程（导致 Alist/Bot 运行一会就停止）。
+Android 12 及更高版本有名为 "Phantom Process Killer" 的机制，会在后台杀掉 Termux 的子进程。
 
-**解决方法 (二选一):**
-
-1.  **使用 ADB (推荐)**:
-    连接电脑或使用无线调试，执行：
-    ```bash
-    adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
-    ```
-2.  **使用 Termux:Boot**:
-    安装 Termux:Boot 插件应用，并授予自启动权限。
+**解决方法 (推荐):**
+连接电脑使用 ADB 执行：
+```bash
+adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
+```
 
 ## 🛠️ 安装教程
 
 1.  **下载 Termux**: 建议从 F-Droid 下载最新版。
-2.  **配置权限**: 
-    ```bash
-    termux-setup-storage
-    ```
+2.  **配置权限**: `termux-setup-storage`
 3.  **拉取代码**:
     ```bash
     git clone https://github.com/YOUR_NAME/YOUR_REPO.git bot
@@ -41,26 +34,29 @@ Android 12 及更高版本有名为 "Phantom Process Killer" 的机制，会在�
     chmod +x setup.sh
     ./setup.sh
     ```
-5.  **配置**:
+5.  **配置变量**:
     ```bash
     nano ~/.env
-    # 填入 BOT_TOKEN 和 ADMIN_ID 即可
     ```
-6.  **启动**:
-    ```bash
-    ./start.sh
-    ```
+    *参考项目中的 `.env.example` 文件填写。*
 
-## 📝 常用命令
+6.  **启动**: `./start.sh`
 
-*   启动所有服务: `./start.sh`
-*   查看运行状态: `pm2 monit`
-*   停止服务: `pm2 stop all`
-*   查看 Alist 密码: 在 TG 发送 `🔑 查看密码`
+## 📝 配置文件说明 (~/.env)
+
+| 变量名 | 必填 | 说明 |
+| :--- | :--- | :--- |
+| `BOT_TOKEN` | ✅ | Telegram 机器人 Token |
+| `ADMIN_ID` | ✅ | 你的 Telegram 用户 ID |
+| `TUNNEL_MODE` | ✅ | `quick` (随机) 或 `token` (固定) |
+| `CLOUDFLARE_TOKEN` | ❌ | 固定域名模式必须填 |
+| `ALIST_DOMAIN` | ❌ | 固定域名地址 (不带http) |
+| `ARIA2_RPC_SECRET` | ❌ | Aria2 密码，推荐设置 |
+| `TG_RTMP_URL` | ❌ | 直播推流地址 |
 
 ## 📂 目录结构
 
-*   `~/bin/`: 存放 alist 和 cloudflared 二进制文件
-*   `~/.aria2/`: Aria2 配置文件
+*   `~/bin/`: 存放二进制文件 (alist, cloudflared)
+*   `~/.aria2/`: Aria2 配置与会话
 *   `~/downloads/`: 默认下载目录
-*   `bot/requirements.txt`: Python 依赖列表
+*   `~/.env`: **配置文件 (位于 Termux 根目录)**
