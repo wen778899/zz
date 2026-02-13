@@ -3,12 +3,13 @@ const os = require('os');
 const path = require('path');
 
 const HOME = os.homedir();
+const PROJECT_ROOT = __dirname;
 
 // Termux 中脚本通常在 HOME/bin 下
 const alistPath = path.join(HOME, 'bin', 'alist');
 const cloudflaredPath = path.join(HOME, 'bin', 'cloudflared');
 
-// 读取环境配置
+// 读取环境配置 (位于 Termux 根目录)
 const mode = process.env.TUNNEL_MODE || 'quick';
 const token = process.env.CLOUDFLARE_TOKEN;
 
@@ -27,8 +28,8 @@ module.exports = {
       script: alistPath,
       args: "server",
       autorestart: true,
-      max_memory_restart: '300M', // 限制内存防止 Termux 崩溃
-      out_file: "/dev/null", // 减少日志写入，保护手机闪存
+      max_memory_restart: '300M',
+      out_file: "/dev/null", 
       error_file: path.join(HOME, ".pm2", "logs", "alist-error.log")
     },
     {
@@ -39,8 +40,8 @@ module.exports = {
     },
     {
       name: "bot",
-      script: "./bot/main.py",
-      interpreter: "python", // Termux 直接用 python
+      script: path.join(PROJECT_ROOT, "bot", "main.py"), // 使用绝对路径
+      interpreter: "python",
       autorestart: true,
       env: {
         PYTHONUNBUFFERED: "1"
@@ -51,11 +52,11 @@ module.exports = {
       script: cloudflaredPath,
       args: tunnelArgs,
       autorestart: true,
-      restart_delay: 5000 // 失败后等待 5 秒重试
+      restart_delay: 5000
     },
     {
       name: "monitor",
-      script: "./monitor.sh",
+      script: path.join(PROJECT_ROOT, "monitor.sh"), // 使用绝对路径
       interpreter: "bash",
       autorestart: true
     }

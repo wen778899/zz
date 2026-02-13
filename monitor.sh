@@ -4,11 +4,14 @@
 # 更新监控守护进程
 # ==========================================
 
-cd "$HOME"
+# 获取脚本所在目录 (即项目根目录)
+PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$PROJECT_DIR"
+
 export PATH="$HOME/bin:$PATH"
 
 LOG_FILE="$HOME/.pm2/logs/monitor.log"
-UPDATE_SCRIPT="$HOME/update.sh"
+UPDATE_SCRIPT="$PROJECT_DIR/update.sh"
 
 while true; do
     # 简单的网络检查
@@ -22,6 +25,8 @@ while true; do
             echo "[$(date)] ⚡ 发现新版本，执行更新..." >> "$LOG_FILE"
             if [ -f "$UPDATE_SCRIPT" ]; then
                 bash "$UPDATE_SCRIPT" >> "$LOG_FILE" 2>&1
+            else
+                echo "[$(date)] ❌ 找不到 update.sh" >> "$LOG_FILE"
             fi
         fi
     fi
