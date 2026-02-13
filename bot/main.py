@@ -3,6 +3,7 @@ import logging
 import asyncio
 import sys
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from telegram.request import HTTPXRequest
 from .config import BOT_TOKEN, validate_config
 from .handlers import (
     start, trigger_stream, download_command, handle_message, 
@@ -28,7 +29,15 @@ if __name__ == '__main__':
     
     # 建立支持 JobQueue 的 Application
     try:
-        app = ApplicationBuilder().token(BOT_TOKEN).build()
+        # 配置网络请求参数，增加超时时间以适应不稳定网络
+        request = HTTPXRequest(
+            connection_pool_size=8,
+            read_timeout=30.0,   # 增加读取超时
+            write_timeout=30.0,  # 增加写入超时
+            connect_timeout=30.0 # 增加连接超时
+        )
+
+        app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
         
         # 1. 注册全局错误处理器
         app.add_error_handler(global_error_handler)

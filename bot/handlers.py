@@ -28,7 +28,9 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
     logger.error("Exception while handling an update:", exc_info=context.error)
     if ADMIN_ID:
         try:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 Bot 发生错误: {context.error}")
+            # 缩短错误信息，防止发送失败
+            err_msg = str(context.error)[:200]
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 Bot 发生错误: {err_msg}")
         except:
             pass
 
@@ -141,8 +143,11 @@ async def add_key_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     name = args[0]
     key = args[1]
-    add_key(name, key)
-    await update.message.reply_text(f"✅ 已保存密钥: `{name}`", parse_mode=ParseMode.MARKDOWN)
+    
+    if add_key(name, key):
+        await update.message.reply_text(f"✅ 已保存密钥: `{name}`", parse_mode=ParseMode.MARKDOWN)
+    else:
+        await update.message.reply_text(f"❌ 保存失败: 可能是文件权限错误", parse_mode=ParseMode.MARKDOWN)
 
 async def del_key_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_auth(update.effective_user.id): return
