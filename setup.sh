@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==========================================
-# Termux Alist Bot 部署脚本 (自动换源版)
+# Termux Alist Bot 部署脚本 (增强自动换源版)
 # ==========================================
 set -e
 
@@ -32,7 +32,8 @@ pkg update -y || true
 pkg upgrade -y || true
 
 echo -e "\033[1;36m>>> [2/5] 安装必要依赖...\033[0m"
-pkg install -y python nodejs aria2 ffmpeg git vim curl wget tar openssl-tool build-essential libffi termux-tools
+# 增加 ca-certificates 防止 SSL 报错
+pkg install -y python nodejs aria2 ffmpeg git vim curl wget tar openssl-tool build-essential libffi termux-tools ca-certificates
 
 echo -e "\033[1;36m>>> [3/5] 安装 Python 库...\033[0m"
 # Termux 禁止使用 pip 升级自身，这里只安装依赖包
@@ -67,7 +68,7 @@ else
     echo "✅ Cloudflared 已存在 ($CLOUDFLARED_BIN)"
 fi
 
-# --- 2. 安装/修复 Alist (自动换源逻辑) ---
+# --- 2. 安装/修复 Alist (增强自动换源逻辑) ---
 ALIST_BIN="$HOME/bin/alist"
 STABLE_VERSION="v3.41.0"
 ALIST_FILE="alist.tar.gz"
@@ -75,11 +76,11 @@ ALIST_FILE="alist.tar.gz"
 # 强制停止现有进程
 pm2 stop alist >/dev/null 2>&1 || true
 
-# 定义下载源数组
+# 定义下载源数组 (优化镜像列表)
 MIRRORS=(
     "https://github.com/alist-org/alist/releases/download/${STABLE_VERSION}/alist-${ALIST_ARCH}.tar.gz"
-    "https://mirror.ghproxy.com/https://github.com/alist-org/alist/releases/download/${STABLE_VERSION}/alist-${ALIST_ARCH}.tar.gz"
-    "https://ghproxy.net/https://github.com/alist-org/alist/releases/download/${STABLE_VERSION}/alist-${ALIST_ARCH}.tar.gz"
+    "https://ghproxy.cn/https://github.com/alist-org/alist/releases/download/${STABLE_VERSION}/alist-${ALIST_ARCH}.tar.gz"
+    "https://gh-proxy.com/https://github.com/alist-org/alist/releases/download/${STABLE_VERSION}/alist-${ALIST_ARCH}.tar.gz"
 )
 
 echo "⬇️ 正在安装/修复 Alist (目标版本: $STABLE_VERSION)..."
@@ -94,13 +95,20 @@ for URL in "${MIRRORS[@]}"; do
     # 清理旧文件
     rm -f "$ALIST_BIN" "$ALIST_FILE" alist
 
-    # 尝试下载 (超时设置为 15秒)
-    if wget --timeout=15 -O "$ALIST_FILE" "$URL"; then
+    # 尝试下载
+    # --no-check-certificate: 规避老旧设备或代理的 SSL 证书问题
+    # --user-agent: 伪装浏览器，防止被某些防火墙拦截
+    # --timeout=30: 延长超时时间
+    if wget --no-check-certificate --user-agent="Mozilla/5.0" --timeout=30 -O "$ALIST_FILE" "$URL"; then
         echo "📦 下载完成，正在校验..."
         
-        # 1. 检查是不是压缩包 (防止下载到报错的 HTML 页面)
+        # 1. 检查是不是压缩包
         if ! file "$ALIST_FILE" | grep -q "gzip compressed data"; then
-            echo "⚠️  文件校验失败: 下载的不是有效的 tar.gz 包 (可能是网络拦截)"
+            echo "⚠️  文件校验失败: 不是有效的 gzip 包 (可能是 HTML 错误页)"
+            # 打印文件头查看内容
+            echo "--- 文件头内容 (前 200 字节) ---"
+            head -c 200 "$ALIST_FILE"
+            echo -e "\n----------------------------"
             continue
         fi
 
@@ -118,6 +126,8 @@ for URL in "${MIRRORS[@]}"; do
                 break # 成功则跳出循环
             else
                 echo "⚠️  二进制运行失败 (架构不匹配或文件损坏)"
+                echo "🔍 错误详情:"
+                "$ALIST_BIN" version || true
             fi
         else
             echo "⚠️  解压失败，文件可能已损坏"
@@ -130,10 +140,10 @@ done
 if [ "$DOWNLOAD_SUCCESS" = false ]; then
     echo "------------------------------------------------"
     echo "❌ 所有源均下载失败！"
-    echo "💡 请尝试："
-    echo "1. 开启 VPN/代理"
-    echo "2. 检查网络连接"
-    echo "3. 稍后重试"
+    echo "💡 可能原因："
+    echo "1. 网络连接不稳定，请尝试切换 WiFi/流量"
+    echo "2. 需要开启 VPN/代理 (GitHub 在国内经常被阻断)"
+    echo "3. 镜像源暂时维护中"
     echo "------------------------------------------------"
     exit 1
 fi
@@ -155,7 +165,7 @@ TUNNEL_MODE=quick
 CLOUDFLARE_TOKEN=
 # Alist 域名 (可选，如果不填则自动获取隧道域名)
 ALIST_DOMAIN=
-# 直播推流地址 (可选)
+# 直播推流基础地址 (例如 rtmp://ip:port/live/)
 TG_RTMP_URL=
 # Aria2 密钥 (默认无需修改)
 ARIA2_RPC_SECRET=
