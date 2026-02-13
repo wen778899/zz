@@ -27,8 +27,9 @@ case $ARCH in
 esac
 
 echo -e "\033[1;36m>>> [1/5] 更新 Termux 基础环境...\033[0m"
-pkg update -y
-pkg upgrade -y
+# 使用 || true 防止源更新失败导致脚本退出
+pkg update -y || true
+pkg upgrade -y || true
 
 echo -e "\033[1;36m>>> [2/5] 安装必要依赖...\033[0m"
 pkg install -y python nodejs aria2 ffmpeg git vim curl wget tar openssl-tool build-essential libffi termux-tools
@@ -42,7 +43,11 @@ else
 fi
 
 echo -e "\033[1;36m>>> [4/5] 安装 PM2 (进程守护)...\033[0m"
-npm install -g pm2
+if ! command -v pm2 &> /dev/null; then
+    npm install -g pm2
+else
+    echo "PM2 已安装"
+fi
 
 # 准备 bin 目录
 mkdir -p "$HOME/bin"
@@ -51,21 +56,31 @@ export PATH="$HOME/bin:$PATH"
 echo -e "\033[1;36m>>> [5/5] 下载核心组件 ($ARCH)...\033[0m"
 
 # --- 1. 安装 Cloudflared ---
-if ! command -v cloudflared &> /dev/null; then
-    echo "正在下载 Cloudflared..."
-    wget -q "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-${CF_ARCH}" -O "$HOME/bin/cloudflared"
-    chmod +x "$HOME/bin/cloudflared"
+CLOUDFLARED_BIN="$HOME/bin/cloudflared"
+if [ ! -f "$CLOUDFLARED_BIN" ]; then
+    echo "⬇️ 正在下载 Cloudflared..."
+    # 移除 -q 以显示进度，方便排错
+    wget -O "$CLOUDFLARED_BIN" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-${CF_ARCH}"
+    chmod +x "$CLOUDFLARED_BIN"
+    echo "✅ Cloudflared 安装完成"
+else
+    echo "✅ Cloudflared 已存在 ($CLOUDFLARED_BIN)"
 fi
 
 # --- 2. 安装 Alist ---
-if ! command -v alist &> /dev/null; then
-    echo "正在下载 Alist..."
+ALIST_BIN="$HOME/bin/alist"
+if [ ! -f "$ALIST_BIN" ]; then
+    echo "⬇️ 正在下载 Alist..."
     LATEST_TAG=$(curl -s https://api.github.com/repos/alist-org/alist/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    wget -q "https://github.com/alist-org/alist/releases/download/${LATEST_TAG}/alist-${ALIST_ARCH}.tar.gz" -O alist.tar.gz
+    echo "版本: $LATEST_TAG"
+    wget -O alist.tar.gz "https://github.com/alist-org/alist/releases/download/${LATEST_TAG}/alist-${ALIST_ARCH}.tar.gz"
     tar -zxvf alist.tar.gz
     chmod +x alist
-    mv alist "$HOME/bin/alist"
+    mv alist "$ALIST_BIN"
     rm alist.tar.gz
+    echo "✅ Alist 安装完成"
+else
+    echo "✅ Alist 已存在 ($ALIST_BIN)"
 fi
 
 # --- 3. 生成配置文件 ---

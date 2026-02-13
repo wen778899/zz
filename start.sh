@@ -17,7 +17,30 @@ else
     exit 1
 fi
 
-# 2. 生成 PM2 配置文件 (避免 ESM/CJS 兼容性问题)
+# 2. 检查核心组件是否存在
+echo "🔍 检查组件完整性..."
+MISSING_FILES=0
+
+if [ ! -f "$HOME/bin/alist" ]; then
+    echo "❌ 缺失文件: ~/bin/alist"
+    MISSING_FILES=1
+fi
+
+if [ ! -f "$HOME/bin/cloudflared" ]; then
+    echo "❌ 缺失文件: ~/bin/cloudflared"
+    MISSING_FILES=1
+fi
+
+if [ $MISSING_FILES -eq 1 ]; then
+    echo "-----------------------------------"
+    echo "⚠️ 检测到核心组件缺失，无法启动！"
+    echo "请重新运行安装脚本进行修复："
+    echo "👉 ./setup.sh"
+    echo "-----------------------------------"
+    exit 1
+fi
+
+# 3. 生成 PM2 配置文件 (避免 ESM/CJS 兼容性问题)
 echo "⚙️ 生成 PM2 任务配置..."
 if [ -f "generate-config.js" ]; then
     node generate-config.js
@@ -26,13 +49,13 @@ else
     exit 1
 fi
 
-# 3. 清理旧的 JS/CJS 配置文件，防止 PM2 混淆
+# 4. 清理旧的 JS/CJS 配置文件，防止 PM2 混淆
 echo "🧹 清理旧配置文件..."
 rm -f ecosystem.config.js ecosystem.config.cjs pm2.config.cjs
 
 echo "✅ 正在启动 PM2 服务组..."
 
-# 4. 使用生成的 JSON 启动
+# 5. 使用生成的 JSON 启动
 pm2 start ecosystem.config.json
 pm2 save
 
