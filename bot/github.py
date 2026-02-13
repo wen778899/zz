@@ -81,13 +81,34 @@ def trigger_stream_action(base_url, raw_path, target_rtmp_url):
 def get_single_usage(repo, token):
     """查询单个账号的额度使用情况"""
     try:
-        # 从 repo (username/repo) 提取 username
-        username = repo.split('/')[0]
-        url = f"https://api.github.com/users/{username}/settings/billing/actions"
+        # 从 repo (username/repo) 提取 owner (可能是 User 也可能是 Org)
+        owner = repo.split('/')[0]
         headers = {
             "Authorization": f"token {token}",
             "Accept": "application/vnd.github.v3+json"
         }
+
+        # 1. 检查账号类型 (User vs Organization)
+        # 这一步非常重要，因为 billing API 的路径不同，且可以提前验证 Token 有效性
+        type_url = f"https://api.github.com/users/{owner}"
+        r_type = requests.get(type_url, headers=headers, timeout=5)
+
+        if r_type.status_code == 401:
+             return False, "Token 无效 (401)"
+        elif r_type.status_code == 404:
+             return False, "用户/组织不存在 (404)"
+        elif r_type.status_code != 200:
+             # 如果连用户信息都读不到，直接返回错误
+             return False, f"API 错误 {r_type.status_code}"
+
+        account_type = r_type.json().get("type", "User")
+
+        # 2. 根据类型选择 Billing API 接口
+        if account_type == "Organization":
+            url = f"https://api.github.com/orgs/{owner}/settings/billing/actions"
+        else:
+            url = f"https://api.github.com/users/{owner}/settings/billing/actions"
+            
         r = requests.get(url, headers=headers, timeout=5)
         
         if r.status_code == 200:
@@ -96,9 +117,12 @@ def get_single_usage(repo, token):
             limit = data.get("included_minutes", 2000)
             return True, {"used": used, "limit": limit}
         elif r.status_code == 403:
-            return False, "权限不足 (缺少 repo 或 user scope)"
+            return False, "权限不足 (可能缺少 user scope)"
         elif r.status_code == 404:
-            return False, "找不到用户 (Token 错误?)"
+            # 细粒度 Token (Fine-grained) 不支持读取 Billing，或者是非 Admin 读取 Org
+            return False, "无权读取账单 (404)"
+        elif r.status_code == 410:
+            return False, "接口已废弃 (410)"
         else:
             return False, f"HTTP {r.status_code}"
     except Exception as e:
