@@ -7,7 +7,7 @@ import requests
 import json
 import logging
 import socket
-from .config import HOME_DIR, TUNNEL_MODE, ARIA2_RPC_SECRET, ALIST_DOMAIN, get_account_count
+from .config import HOME_DIR, ARIA2_RPC_SECRET, get_account_count
 
 logger = logging.getLogger(__name__)
 
@@ -47,30 +47,25 @@ def check_services_health():
     return status
 
 def get_public_url():
-    if ALIST_DOMAIN:
-        url = ALIST_DOMAIN.strip()
-        if not url.startswith("http"): url = "https://" + url
-        return url
-    if TUNNEL_MODE == "quick":
-        # Cloudflared 的 Quick Tunnel URL 通常打印在 stderr 中 (tunnel-error.log)
-        # 我们同时检查 error 和 out 日志
-        log_files = ["tunnel-error.log", "tunnel-out.log"]
-        
-        for log_file in log_files:
-            try:
-                log_path = os.path.join(HOME_DIR, ".pm2", "logs", log_file)
-                if os.path.exists(log_path):
-                    # 读取最后 4KB 内容
-                    with open(log_path, 'rb') as f:
-                        try:
-                            f.seek(-4096, 2)
-                        except OSError:
-                            f.seek(0)
-                        logs = f.read().decode('utf-8', errors='ignore')
-                        
-                    urls = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', logs)
-                    if urls: return urls[-1]
-            except Exception: pass
+    """仅从日志中获取 Cloudflare Quick Tunnel 链接"""
+    log_files = ["tunnel-error.log", "tunnel-out.log"]
+    
+    for log_file in log_files:
+        try:
+            log_path = os.path.join(HOME_DIR, ".pm2", "logs", log_file)
+            if os.path.exists(log_path):
+                # 读取最后 8KB 内容，防止文件过大
+                with open(log_path, 'rb') as f:
+                    try:
+                        f.seek(-8192, 2)
+                    except OSError:
+                        f.seek(0)
+                    logs = f.read().decode('utf-8', errors='ignore')
+                    
+                # 匹配 trycloudflare.com 链接
+                urls = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', logs)
+                if urls: return urls[-1]
+        except Exception: pass
     return None
 
 def get_disk_usage():

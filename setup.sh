@@ -2,7 +2,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
 # ==========================================
-# Termux Alist Bot 部署脚本 (官方源版)
+# Termux Alist Bot 部署脚本 (纯净版)
 # ==========================================
 set -e
 
@@ -36,8 +36,6 @@ echo -e "\033[1;36m>>> [2/5] 安装必要依赖...\033[0m"
 pkg install -y python nodejs aria2 ffmpeg git vim curl wget tar openssl-tool build-essential libffi termux-tools ca-certificates alist proot
 
 # --- 修复 Termux DNS (配合 proot 使用) ---
-# Cloudflared (Go程序) 需要 /etc/resolv.conf 才能正常解析域名
-# 我们在 $PREFIX/etc/resolv.conf 创建文件，稍后通过 termux-chroot 映射到 /etc/resolv.conf
 RESOLV_CONF="$PREFIX/etc/resolv.conf"
 if [ ! -f "$RESOLV_CONF" ] || [ ! -s "$RESOLV_CONF" ]; then
     echo "🔧 修复 DNS 配置 (创建 $RESOLV_CONF)..."
@@ -49,27 +47,15 @@ else
 fi
 
 # --- 修复 Cloudflared SSL 证书问题 (配合 proot) ---
-# Cloudflared (Go) 在 Linux 下通常寻找 /etc/ssl/certs/ca-certificates.crt
-# Termux 的证书位于 $PREFIX/etc/tls/cert.pem
-# termux-chroot 将 $PREFIX/etc 映射为 /etc
-# 因此我们需要在 $PREFIX/etc 下建立符合 Linux 标准的软链接
-
 echo "🔧 修复 SSL 证书路径..."
-# 确保目标目录存在
 mkdir -p "$PREFIX/etc/ssl/certs"
-
-# 1. 标准 Linux 路径 (Debian/Ubuntu)
 rm -f "$PREFIX/etc/ssl/certs/ca-certificates.crt"
 ln -sf "$PREFIX/etc/tls/cert.pem" "$PREFIX/etc/ssl/certs/ca-certificates.crt"
-
-# 2. 其他常见路径 (Alpine/Generic)
 rm -f "$PREFIX/etc/ssl/cert.pem"
 ln -sf "$PREFIX/etc/tls/cert.pem" "$PREFIX/etc/ssl/cert.pem"
-
 echo "✅ SSL 证书链接已建立"
 
 echo -e "\033[1;36m>>> [3/5] 安装 Python 库...\033[0m"
-# Termux 禁止使用 pip 升级自身，这里只安装依赖包
 if [ -f "bot/requirements.txt" ]; then
     pip install -r bot/requirements.txt
 else
@@ -93,7 +79,6 @@ echo -e "\033[1;36m>>> [5/5] 配置核心组件...\033[0m"
 CLOUDFLARED_BIN="$HOME/bin/cloudflared"
 if [ ! -f "$CLOUDFLARED_BIN" ]; then
     echo "⬇️ 正在下载 Cloudflared..."
-    # Cloudflare 一般较稳定，暂不配置多源
     wget -O "$CLOUDFLARED_BIN" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-${CF_ARCH}"
     chmod +x "$CLOUDFLARED_BIN"
     echo "✅ Cloudflared 下载完成"
@@ -102,85 +87,47 @@ else
 fi
 
 # 验证 Cloudflared 二进制
-echo "🧪 验证 Cloudflared 运行..."
 if "$CLOUDFLARED_BIN" --version > /dev/null; then
     echo "✅ Cloudflared 运行正常！"
 else
-    echo "⚠️  Cloudflared 运行失败 (架构不匹配或文件损坏)"
-    echo "尝试删除并重新运行 setup..."
+    echo "⚠️  Cloudflared 运行失败，尝试删除..."
     rm -f "$CLOUDFLARED_BIN"
-    # 如果是第一次运行失败，可以考虑这里不强制退出，或者提醒用户
-    echo "❌ 请尝试重新运行 ./setup.sh 下载正确版本。"
+    echo "❌ 请重新运行 ./setup.sh"
 fi
 
 # --- 2. 配置 Alist (官方源) ---
 ALIST_BIN="$HOME/bin/alist"
-
-# 强制停止现有进程
 pm2 stop alist >/dev/null 2>&1 || true
 
 echo "⚙️ 配置 Alist..."
-
-# 1. 优先检测 Termux 系统路径下的 Alist ($PREFIX/bin/alist)
-# 避免因为 ~/bin 在 PATH 前面而检测到错误的/损坏的旧文件
 TERMUX_ALIST_PATH="$PREFIX/bin/alist"
 
 if [ -f "$TERMUX_ALIST_PATH" ]; then
     echo "✅ 检测到系统内置 Alist: $TERMUX_ALIST_PATH"
-    
-    # 删除旧的 ~/bin/alist (无论是文件还是软链接)
     rm -f "$ALIST_BIN"
-    
-    # 建立软链接
     ln -sf "$TERMUX_ALIST_PATH" "$ALIST_BIN"
-    echo "🔗 已更新链接: ~/bin/alist -> $TERMUX_ALIST_PATH"
-
 elif command -v alist &> /dev/null; then
-    # 兜底: 如果不在标准路径，但 command -v 能找到
     SYSTEM_ALIST=$(command -v alist)
-    
-    # 防止循环链接 (例如 command -v 返回的是 ~/bin/alist)
     if [ "$SYSTEM_ALIST" == "$ALIST_BIN" ]; then
-        echo "⚠️  检测到 Alist 路径指向自身，尝试强制重装..."
         pkg reinstall -y alist
-        # 重装后再次检查标准路径
         if [ -f "$TERMUX_ALIST_PATH" ]; then
              rm -f "$ALIST_BIN"
              ln -sf "$TERMUX_ALIST_PATH" "$ALIST_BIN"
         else
-             echo "❌ 重装失败，请尝试手动运行: pkg install alist"
              exit 1
         fi
     else
-        echo "✅ 检测到 Alist (非标准路径): $SYSTEM_ALIST"
         rm -f "$ALIST_BIN"
         ln -sf "$SYSTEM_ALIST" "$ALIST_BIN"
     fi
 else
     echo "⚠️  未检测到 Alist，正在尝试安装..."
     pkg install -y alist
-    
     if [ -f "$TERMUX_ALIST_PATH" ]; then
         rm -f "$ALIST_BIN"
         ln -sf "$TERMUX_ALIST_PATH" "$ALIST_BIN"
     else
         echo "❌ 错误: Alist 安装失败。"
-        exit 1
-    fi
-fi
-
-# 验证版本
-echo "🧪 验证 Alist 运行..."
-if "$ALIST_BIN" version > /dev/null 2>&1; then
-    echo "✅ Alist 运行正常！"
-else
-    echo "⚠️  Alist 运行失败，文件可能损坏。"
-    echo "尝试清理并重装..."
-    pkg reinstall -y alist
-    if "$ALIST_BIN" version > /dev/null 2>&1; then
-        echo "✅ Alist 修复成功！"
-    else
-        echo "❌ Alist 仍然无法运行，请检查 Termux 环境。"
         exit 1
     fi
 fi
@@ -191,6 +138,7 @@ echo "📝 配置文件路径: $ENV_FILE"
 
 if [ ! -f "$ENV_FILE" ]; then
     echo "生成默认配置文件: ~/.env"
+    # ⚠️ 移除了所有隧道相关的变量，强制使用 Quick Tunnel
     cat <<EOT >> "$ENV_FILE"
 # ==============================
 # Termux Bot 配置文件
@@ -198,15 +146,10 @@ if [ ! -f "$ENV_FILE" ]; then
 BOT_TOKEN=
 ADMIN_ID=
 
-# 9. Alist 密码 (推荐配置)
-# 填入你的 Alist 密码，Bot 将直接使用此密码登录，无需自动抓取
+# Alist 密码 (推荐配置)
+# 填入你的 Alist 密码，Bot 将直接使用此密码登录
 ALIST_PASSWORD=
 
-# 隧道模式: quick (随机域名) 或 token (固定域名)
-TUNNEL_MODE=quick
-CLOUDFLARE_TOKEN=
-# Alist 域名 (可选，如果不填则自动获取隧道域名)
-ALIST_DOMAIN=
 # 直播推流基础地址 (例如 rtmp://ip:port/live/)
 TG_RTMP_URL=
 # Aria2 密钥 (默认无需修改)

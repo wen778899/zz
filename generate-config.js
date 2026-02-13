@@ -25,7 +25,7 @@ try {
 
 console.log(`ℹ️ Python 路径: ${pythonExec}`);
 
-// 2. 检测 termux-chroot (解决 DNS 问题的关键)
+// 2. 检测 termux-chroot
 let termuxChrootPath = "";
 let useProot = false;
 try {
@@ -49,41 +49,18 @@ if (!fs.existsSync(alistDataDir)) {
     }
 }
 
-// 4. 解析配置
-// 添加 --edge-ip-version 4 强制 IPv4，提高稳定性
-// 关键: 指向 localhost 而不是 127.0.0.1 有时在 proot 下更好，但保持 127.0.0.1 通常更明确
-let tunnelArgs = ['tunnel', '--url', 'http://127.0.0.1:5244', '--no-autoupdate', '--protocol', 'http2', '--edge-ip-version', '4', '--metrics', '127.0.0.1:49500'];
+// 4. 定义 Tunnel 参数 (强制 Quick Tunnel)
+// --url http://127.0.0.1:5244 告诉 Cloudflared 创建一个随机公网 URL 指向本地端口
+const tunnelArgs = [
+    'tunnel', 
+    '--url', 'http://127.0.0.1:5244', 
+    '--no-autoupdate', 
+    '--protocol', 'http2', 
+    '--edge-ip-version', '4', 
+    '--metrics', '127.0.0.1:49500'
+];
 
-const envPath = path.join(HOME, '.env');
-
-try {
-  if (fs.existsSync(envPath)) {
-    const envContent = fs.readFileSync(envPath, 'utf8');
-    
-    const getEnv = (key, defaultVal) => {
-        const regex = new RegExp(`^${key}=(.*)$`, 'm');
-        const match = envContent.match(regex);
-        if (!match) return defaultVal;
-        let val = match[1].trim();
-        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-            val = val.slice(1, -1);
-        }
-        return val;
-    };
-    
-    const token = getEnv('CLOUDFLARE_TOKEN', '');
-    const mode = getEnv('TUNNEL_MODE', 'quick');
-
-    if (mode === 'token' && token) {
-      tunnelArgs = ['tunnel', 'run', '--token', token, '--protocol', 'http2', '--edge-ip-version', '4', '--metrics', '127.0.0.1:49500'];
-      console.log(`ℹ️ 启用 Tunnel Token 模式 (Token 长度: ${token.length})`);
-    } else {
-        console.log(`ℹ️ 启用 Tunnel Quick 模式`);
-    }
-  }
-} catch (error) {
-  console.error("⚠️ 读取 .env 失败，将使用默认配置:", error);
-}
+console.log(`ℹ️ 配置模式: 强制使用 Quick Tunnel (临时随机域名)`);
 
 // 5. 定义 App 配置
 // Alist
@@ -110,7 +87,6 @@ const cloudflaredApp = {
 };
 
 // 如果在 Termux 下，使用 termux-chroot 启动
-// ⚡️ 核心修改: 将 Alist 和 Tunnel 都放入 proot 环境，确保网络环境一致
 if (useProot) {
     // Alist
     alistApp.script = termuxChrootPath;

@@ -54,9 +54,6 @@ def get_account_count():
     return len(GITHUB_POOL)
 
 # --- 系统配置 ---
-TUNNEL_MODE = os.getenv("TUNNEL_MODE", "quick")
-CLOUDFLARE_TOKEN = os.getenv("CLOUDFLARE_TOKEN")
-ALIST_DOMAIN = os.getenv("ALIST_DOMAIN")
 ARIA2_RPC_SECRET = os.getenv("ARIA2_RPC_SECRET")
 
 # Alist 认证配置 (新增)

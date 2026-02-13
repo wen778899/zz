@@ -11,13 +11,7 @@ termux-wake-lock
 
 if [ -f "$ENV_FILE" ]; then
     echo ">>> 检查环境变量配置..."
-    # ⚠️ 关键修改: 不再使用 source "$ENV_FILE"
-    # 因为 GITHUB_ACCOUNTS_LIST 包含 "|" 符号，直接 source 会导致 Bash 将其解析为管道命令而报错
-    # 这里只提取 BOT_TOKEN 用于检查，其他变量交给 Python (dotenv) 安全处理
-    
-    # 使用 grep 和 cut 安全提取 BOT_TOKEN (去除引号和回车符)
     BOT_TOKEN=$(grep -E "^BOT_TOKEN=" "$ENV_FILE" | head -n 1 | cut -d '=' -f 2- | tr -d '"' | tr -d "'" | tr -d '\r')
-    TUNNEL_MODE=$(grep -E "^TUNNEL_MODE=" "$ENV_FILE" | head -n 1 | cut -d '=' -f 2- | tr -d '"' | tr -d "'" | tr -d '\r')
 else
     echo "❌ 未找到 ~/.env 文件，请先运行 ./setup.sh"
     exit 1
@@ -32,7 +26,6 @@ if [ -z "$BOT_TOKEN" ]; then
     echo "--------------------------------------------------------"
     exit 1
 fi
-# --------------------
 
 # 2. 检查核心组件是否存在
 echo "🔍 检查组件完整性..."
@@ -42,12 +35,9 @@ if [ ! -f "$HOME/bin/alist" ]; then
     echo "❌ 缺失文件: ~/bin/alist"
     MISSING_FILES=1
 else
-    # 尝试运行 alist version 检查文件是否损坏
     echo "🧪 验证 Alist 二进制..."
     if ! "$HOME/bin/alist" version > /dev/null 2>&1; then
          echo "❌ Alist 文件似乎已损坏，无法运行。"
-         echo "💡 检测到文件损坏，正在尝试自动修复..."
-         # 自动删除损坏文件，提示用户运行 setup
          rm -f "$HOME/bin/alist"
          MISSING_FILES=1
     fi
@@ -103,41 +93,48 @@ sleep 5
 # --- Alist 检查 ---
 if pm2 list | grep "alist" | grep -q "online"; then
     echo "✅ Alist 进程已启动"
-    
-    # ⚡️ 新增: 深度连接检查 (解决 Error 1033 诊断问题)
     echo "🔍 正在测试本地连接 (http://127.0.0.1:5244)..."
     if curl --connect-timeout 3 -s -I http://127.0.0.1:5244 > /dev/null; then
         echo "✅ 本地连接成功！Alist 正在运行。"
     else
         echo "⚠️  注意: Alist 进程在运行，但无法通过 127.0.0.1 连接。"
         echo "   这可能是 Cloudflare 报错 1033 的原因。"
-        echo "   尝试重启: ./start.sh"
     fi
 else
     echo "❌ Alist 启动失败！"
-    echo "📋 Alist 日志:"
     pm2 logs alist --lines 10 --nostream
 fi
 
-# --- Tunnel 检查 ---
+# --- Tunnel 检查 (提取临时 URL) ---
 if pm2 list | grep "tunnel" | grep -q "online"; then
     echo "✅ Cloudflared Tunnel 启动成功"
+    echo "🔎 正在获取公网链接 (请稍候)..."
     
-    # 针对 Token 模式用户的特别提示
-    if [[ "$TUNNEL_MODE" == "token" ]]; then
-        echo "-----------------------------------"
-        echo "📢 Cloudflare 后台配置指南 (解决 Error 1033):"
-        echo "请确保在 Cloudflare Zero Trust 面板 -> Public Hostname 设置如下:"
-        echo "1. Service Type (协议): HTTP"
-        echo "2. URL (地址): 127.0.0.1:5244"
-        echo "⚠️  不要填 localhost，必须填 127.0.0.1"
-        echo "-----------------------------------"
+    # 尝试循环 10 秒获取 URL
+    TUNNEL_URL=""
+    for i in {1..10}; do
+        # 从日志读取 trycloudflare 链接
+        LOGS=$(pm2 logs tunnel --lines 50 --nostream 2>&1)
+        URL=$(echo "$LOGS" | grep -o 'https://[-a-zA-Z0-9]*\.trycloudflare\.com' | tail -n 1)
+        if [ -n "$URL" ]; then
+            TUNNEL_URL="$URL"
+            break
+        fi
+        sleep 1
+    done
+
+    if [ -n "$TUNNEL_URL" ]; then
+        echo "--------------------------------------------------------"
+        echo -e "\033[1;32m🎉 您的公网访问地址: \033[0m"
+        echo -e "\033[1;32m$TUNNEL_URL\033[0m"
+        echo "--------------------------------------------------------"
+    else
+        echo "⚠️  暂未获取到链接，请稍后在 Bot 中点击「☁️ 隧道」查看。"
     fi
+
 else
     echo "❌ Cloudflared Tunnel 启动失败！"
-    echo "📋 Tunnel 日志:"
     pm2 logs tunnel --lines 10 --nostream
-    echo "💡 提示: 如果是'Exec format error'，请重新运行 ./setup.sh 下载正确版本。"
 fi
 
 # --- 获取密码 ---
@@ -145,19 +142,14 @@ if pm2 list | grep "alist" | grep -q "online"; then
     echo "-----------------------------------"
     echo "🔑 检查 Alist 登录状态..."
     
-    # 优先检查是否存在预设密码文件
     if [ -f "$HOME/.alist_pass" ]; then
         PASS=$(cat "$HOME/.alist_pass")
         echo "👤 用户名: admin"
         echo "🔑 密码: $PASS (已保存)"
     else
-        # 自动获取
         ADMIN_INFO=$("$HOME/bin/alist" admin --data "$DATA_DIR" 2>/dev/null)
-        
-        # 优化: 检查是否包含哈希存储的提示
         if echo "$ADMIN_INFO" | grep -q "hash value"; then
             echo "⚠️  管理员密码已初始化 (加密存储)。"
-            echo "💡 如果您忘记了密码，请运行以下命令设置新密码："
             echo "👉 ./set_pass.sh 您的新密码"
         elif [ -n "$ADMIN_INFO" ]; then
             echo "$ADMIN_INFO"
@@ -169,5 +161,4 @@ fi
 
 echo "-----------------------------------"
 echo "🚀 服务检查完成"
-echo "👉 如果推流失败或打不开网页，请检查上方日志。"
 echo "-----------------------------------"
