@@ -17,9 +17,19 @@ else
     exit 1
 fi
 
+# 2. 清理旧的或无法上传的 .cjs 文件
+if [ -f "ecosystem.config.cjs" ]; then
+    echo "🧹 清理残留文件 ecosystem.config.cjs..."
+    rm ecosystem.config.cjs
+fi
+if [ -f "pm2.config.cjs" ]; then
+    rm pm2.config.cjs
+fi
+
 echo "✅ 正在启动 PM2 服务组..."
-# 启动所有进程 (使用 .cjs 避免 ESM 模块错误)
-pm2 start ecosystem.config.cjs
+
+# 3. 使用标准 JS 配置文件启动
+pm2 start ecosystem.config.js
 pm2 save
 
 echo "-----------------------------------"

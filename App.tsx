@@ -12,7 +12,7 @@ const App: React.FC = () => {
           <ul className="list-disc ml-5 text-gray-400 space-y-1">
             <li><span className="text-green-400">setup.sh</span>: Uses `pkg` to install dependencies.</li>
             <li><span className="text-green-400">start.sh</span>: Optimized for Android shell.</li>
-            <li><span className="text-green-400">ecosystem.config.js</span>: Auto-restart protection.</li>
+            <li><span className="text-green-400">ecosystem.config.js</span>: PM2 service config.</li>
           </ul>
         </div>
 
