@@ -5,20 +5,44 @@ import re
 import requests
 import json
 import logging
+import socket
 from .config import HOME_DIR, TUNNEL_MODE, ARIA2_RPC_SECRET, ALIST_DOMAIN
 
 logger = logging.getLogger(__name__)
 
+def check_port(port):
+    """检查本地端口是否开放"""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(0.5)
+    try:
+        result = sock.connect_ex(('127.0.0.1', int(port)))
+        sock.close()
+        return result == 0
+    except:
+        return False
+
 def check_services_health():
-    status = {'alist': False, 'aria2c': False, 'cloudflared': False}
-    for proc in psutil.process_iter(['name', 'cmdline']):
-        try:
-            name = proc.info['name'] or ""
-            cmdline = " ".join(proc.info['cmdline'] or [])
-            if 'alist' in name or 'alist' in cmdline: status['alist'] = True
-            if 'aria2c' in name or 'aria2c' in cmdline: status['aria2c'] = True
-            if 'cloudflared' in name or 'cloudflared' in cmdline: status['cloudflared'] = True
-        except (psutil.NoSuchProcess, psutil.AccessDenied): continue
+    # Termux 中 psutil 经常拿不到进程列表，改为检测端口
+    # Alist: 5244
+    # Aria2: 6800
+    # Tunnel: 49500 (在 generate-config.js 中配置了 --metrics localhost:49500)
+    status = {
+        'alist': check_port(5244),
+        'aria2c': check_port(6800),
+        'cloudflared': check_port(49500)
+    }
+    
+    # 如果端口没通，尝试兜底用进程名查一次 (兼容部分特殊情况)
+    if not all(status.values()):
+        for proc in psutil.process_iter(['name', 'cmdline']):
+            try:
+                name = proc.info['name'] or ""
+                cmdline = " ".join(proc.info['cmdline'] or [])
+                if not status['alist'] and ('alist' in name or 'alist' in cmdline): status['alist'] = True
+                if not status['aria2c'] and ('aria2c' in name or 'aria2c' in cmdline): status['aria2c'] = True
+                if not status['cloudflared'] and ('cloudflared' in name or 'cloudflared' in cmdline): status['cloudflared'] = True
+            except (psutil.NoSuchProcess, psutil.AccessDenied): continue
+            
     return status
 
 def get_public_url():
@@ -28,10 +52,19 @@ def get_public_url():
         return url
     if TUNNEL_MODE == "quick":
         try:
-            cmd = "pm2 logs tunnel --lines 50 --nostream"
-            logs = subprocess.check_output(cmd.split(), stderr=subprocess.STDOUT).decode('utf-8')
-            urls = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', logs)
-            if urls: return urls[-1]
+            # 读取 Cloudflared 日志文件获取链接
+            log_path = os.path.join(HOME_DIR, ".pm2", "logs", "tunnel-out.log")
+            if os.path.exists(log_path):
+                # 读取最后 2KB 内容
+                with open(log_path, 'rb') as f:
+                    try:
+                        f.seek(-2048, 2)
+                    except OSError:
+                        f.seek(0)
+                    logs = f.read().decode('utf-8', errors='ignore')
+                    
+                urls = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', logs)
+                if urls: return urls[-1]
         except Exception: pass
     return None
 
@@ -78,8 +111,12 @@ def restart_pm2_services():
     except Exception as e: return False, f"❌ 失败: {str(e)}"
 
 def get_admin_pass():
-    try: return subprocess.check_output(["alist", "admin"], stderr=subprocess.STDOUT).decode('utf-8').strip()
-    except Exception: return "获取失败"
+    try:
+        # 指定数据目录查询密码
+        data_dir = os.path.join(HOME_DIR, "alist-data")
+        cmd = [os.path.join(HOME_DIR, "bin", "alist"), "admin", "--data", data_dir]
+        return subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode('utf-8').strip()
+    except Exception as e: return f"获取失败: {str(e)}"
 
 # --- Aria2 相关 ---
 

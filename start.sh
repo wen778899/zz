@@ -35,6 +35,14 @@ MISSING_FILES=0
 if [ ! -f "$HOME/bin/alist" ]; then
     echo "❌ 缺失文件: ~/bin/alist"
     MISSING_FILES=1
+else
+    # 尝试运行 alist version 检查文件是否损坏
+    echo "🧪 验证 Alist 二进制..."
+    if ! "$HOME/bin/alist" version > /dev/null 2>&1; then
+         echo "❌ Alist 文件似乎已损坏，无法运行。"
+         echo "💡 建议运行: rm ~/bin/alist && ./setup.sh"
+         exit 1
+    fi
 fi
 
 if [ ! -f "$HOME/bin/cloudflared" ]; then
@@ -50,6 +58,9 @@ if [ $MISSING_FILES -eq 1 ]; then
     echo "-----------------------------------"
     exit 1
 fi
+
+# 确保 Alist 数据目录存在
+mkdir -p "$HOME/alist-data"
 
 # 3. 生成 PM2 配置文件
 echo "⚙️ 生成 PM2 任务配置..."
