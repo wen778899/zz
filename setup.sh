@@ -59,7 +59,6 @@ echo -e "\033[1;36m>>> [5/5] 下载核心组件 ($ARCH)...\033[0m"
 CLOUDFLARED_BIN="$HOME/bin/cloudflared"
 if [ ! -f "$CLOUDFLARED_BIN" ]; then
     echo "⬇️ 正在下载 Cloudflared..."
-    # 移除 -q 以显示进度，方便排错
     wget -O "$CLOUDFLARED_BIN" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-${CF_ARCH}"
     chmod +x "$CLOUDFLARED_BIN"
     echo "✅ Cloudflared 安装完成"
@@ -71,9 +70,23 @@ fi
 ALIST_BIN="$HOME/bin/alist"
 if [ ! -f "$ALIST_BIN" ]; then
     echo "⬇️ 正在下载 Alist..."
-    LATEST_TAG=$(curl -s https://api.github.com/repos/alist-org/alist/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    echo "版本: $LATEST_TAG"
-    wget -O alist.tar.gz "https://github.com/alist-org/alist/releases/download/${LATEST_TAG}/alist-${ALIST_ARCH}.tar.gz"
+    
+    # 尝试自动获取最新版本号
+    LATEST_TAG=$(curl -sL https://api.github.com/repos/alist-org/alist/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    
+    # 如果获取失败（为空），使用备用版本 v3.42.0 (确保安装能继续)
+    if [ -z "$LATEST_TAG" ]; then
+        echo "⚠️ 自动获取 Alist 版本失败，使用默认版本 v3.42.0"
+        LATEST_TAG="v3.42.0"
+    fi
+    
+    echo "安装版本: $LATEST_TAG"
+    DOWNLOAD_URL="https://github.com/alist-org/alist/releases/download/${LATEST_TAG}/alist-${ALIST_ARCH}.tar.gz"
+    
+    echo "下载地址: $DOWNLOAD_URL"
+    wget -O alist.tar.gz "$DOWNLOAD_URL"
+    
+    # 解压并安装
     tar -zxvf alist.tar.gz
     chmod +x alist
     mv alist "$ALIST_BIN"
@@ -143,4 +156,6 @@ echo "--------------------------------------------------------"
 echo "⚠️  重要提示 (Android 12+):"
 echo "   为了防止后台进程被杀，请务必执行以下 ADB 命令(在电脑上)或使用无线调试:"
 echo "   adb shell \"/system/bin/device_config put activity_manager max_phantom_processes 2147483647\""
+echo "--------------------------------------------------------"
+echo "👉 现在请运行: ./start.sh"
 echo "--------------------------------------------------------"
