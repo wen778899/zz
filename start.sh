@@ -17,6 +17,17 @@ else
     exit 1
 fi
 
+# --- 环境变量检查 ---
+if [ -z "$BOT_TOKEN" ]; then
+    echo "--------------------------------------------------------"
+    echo "⚠️  检测到 BOT_TOKEN 为空！"
+    echo "Bot 无法启动。请先编辑配置文件填入 Telegram Bot Token。"
+    echo "👉 命令: nano ~/.env"
+    echo "--------------------------------------------------------"
+    exit 1
+fi
+# --------------------
+
 # 2. 检查核心组件是否存在
 echo "🔍 检查组件完整性..."
 MISSING_FILES=0
@@ -53,11 +64,9 @@ fi
 echo "🧹 清理旧配置文件..."
 rm -f ecosystem.config.js ecosystem.config.cjs pm2.config.cjs
 
-# 5. 重置 PM2 状态 (修复 Process not found / TypeError 问题)
-echo "🔄 重置 PM2 进程状态 (防止冲突)..."
-# 杀死 PM2 守护进程以彻底清除内存中的错误状态
+# 5. 重置 PM2 状态
+echo "🔄 重置 PM2 进程状态..."
 pm2 kill > /dev/null 2>&1 || true
-# 稍微等待守护进程停止
 sleep 2
 
 echo "✅ 正在启动 PM2 服务组..."
@@ -69,8 +78,8 @@ pm2 save
 echo "-----------------------------------"
 echo "🚀 服务已在后台运行"
 echo "-----------------------------------"
-echo "📊 监控面板: pm2 monit"
-echo "📝 查看日志: pm2 logs"
-echo "🔄 重启所有: pm2 restart all"
-echo "💡 提示: 请勿从多任务后台划掉 Termux"
+echo "❓ 如果 Bot 无反应，请尝试以下操作:"
+echo "   1. 检查日志: pm2 logs bot"
+echo "   2. 检查网络: 确保 Termux 能连接 Telegram API"
+echo "   3. 检查配置: cat ~/.env (注意保护 Token)"
 echo "-----------------------------------"

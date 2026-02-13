@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import sys
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 from .config import BOT_TOKEN, validate_config
 from .handlers import (
@@ -10,30 +11,42 @@ from .handlers import (
 # 配置日志到标准输出
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 
+logger = logging.getLogger(__name__)
+
 if __name__ == '__main__':
+    print("---------------------------------------")
+    print("🚀 Termux Bot 进程正在启动...")
+    print("---------------------------------------")
+
     validate_config()
     
     # 建立支持 JobQueue 的 Application
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    
-    # 1. 注册全局错误处理器 (关键: 捕获所有 Bot 内部异常)
-    app.add_error_handler(global_error_handler)
-    
-    # 2. 注册定时任务 (每 2 分钟检查一次服务状态)
-    if app.job_queue:
-        app.job_queue.run_repeating(monitor_services_job, interval=120, first=10)
-    
-    # 3. 注册命令处理器
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("stream", trigger_stream))
-    app.add_handler(CommandHandler("dl", download_command))
-    app.add_handler(CommandHandler("usage", send_usage_stats))
-    
-    # 4. 注册消息处理器
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    
-    print("🤖 机器人正在后台运行 (已开启全功能监控)...")
-    app.run_polling()
+    try:
+        app = ApplicationBuilder().token(BOT_TOKEN).build()
+        
+        # 1. 注册全局错误处理器 (关键: 捕获所有 Bot 内部异常)
+        app.add_error_handler(global_error_handler)
+        
+        # 2. 注册定时任务 (每 2 分钟检查一次服务状态)
+        if app.job_queue:
+            app.job_queue.run_repeating(monitor_services_job, interval=120, first=10)
+        
+        # 3. 注册命令处理器
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("stream", trigger_stream))
+        app.add_handler(CommandHandler("dl", download_command))
+        app.add_handler(CommandHandler("usage", send_usage_stats))
+        
+        # 4. 注册消息处理器
+        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+        
+        print("✅ 机器人连接成功！正在监听消息...")
+        app.run_polling()
+    except Exception as e:
+        logger.error(f"❌ 启动失败: {e}")
+        print("💡 如果是网络错误，请检查是否开启了代理或 VPN。")
+        sys.exit(1)
