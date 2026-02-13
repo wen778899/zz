@@ -30,11 +30,18 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y ffmpeg
 
+    - name: Check Connectivity (Debug)
+      env:
+        VIDEO_URL: ${{ github.event.client_payload.video_url || inputs.video_url }}
+      run: |
+        echo "🔍 正在检查视频链接连通性..."
+        echo "URL: $VIDEO_URL"
+        # 尝试获取 Header，超时时间 10秒。失败不阻断流程，交由 FFmpeg 重试。
+        curl -I -L --max-time 10 "$VIDEO_URL" || echo "⚠️ Curl 检查失败 (可能是 530)，准备启动 FFmpeg 自动重连模式..."
+
     - name: Start Streaming
       env:
         # ⚡️ 核心修复: 使用 GitHub 表达式 (||) 处理变量
-        # 如果是 Bot 触发 (client_payload)，则使用前者
-        # 如果是 手动触发 (inputs)，则使用后者
         VIDEO_URL: ${{ github.event.client_payload.video_url || inputs.video_url }}
         RTMP_URL: ${{ github.event.client_payload.rtmp_url || inputs.rtmp_url }}
         ALIST_TOKEN: ${{ github.event.client_payload.alist_token || inputs.alist_token }}
@@ -53,10 +60,20 @@ jobs:
         # 构建 FFmpeg 命令数组
         CMD=(ffmpeg -re)
         
-        # 网络优化参数
-        CMD+=(-reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1 -reconnect_delay_max 5)
+        # --- 网络抗波动配置 (关键) ---
+        # 1. 基础重连
+        CMD+=(-reconnect 1)
+        CMD+=(-reconnect_at_eof 1)
+        CMD+=(-reconnect_streamed 1)
+        
+        # 2. 针对 HTTP 错误 (如 Cloudflare 530/502) 强制重连
+        CMD+=(-reconnect_on_http_error 4xx,5xx)
+        
+        # 3. 增加重连延时容忍度 (30秒)
+        CMD+=(-reconnect_delay_max 30)
+        
         CMD+=(-rw_timeout 15000000)
-        CMD+=(-user_agent "Mozilla/5.0")
+        CMD+=(-user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
 
         # 鉴权 Headers
         if [[ -n "$ALIST_TOKEN" ]]; then

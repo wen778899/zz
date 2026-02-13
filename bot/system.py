@@ -119,7 +119,7 @@ def get_log_file_path(service="alist"):
 def restart_pm2_services():
     try:
         subprocess.run(["pm2", "restart", "all"], check=True)
-        return True, "✅ 重启指令已发送"
+        return True, "✅ 服务已重启。如果遇到 Error 530，这通常能解决问题。"
     except Exception as e: return False, f"❌ 失败: {str(e)}"
 
 def get_admin_pass():
