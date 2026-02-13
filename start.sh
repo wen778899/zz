@@ -2,6 +2,7 @@
 
 ENV_FILE="$HOME/.env"
 export PATH="$HOME/bin:$PATH"
+DATA_DIR="$HOME/alist-data"
 
 # 1. 申请唤醒锁
 echo "🔒 申请 Termux 唤醒锁 (Wake Lock)..."
@@ -64,8 +65,9 @@ if [ $MISSING_FILES -eq 1 ]; then
     exit 1
 fi
 
-# 确保 Alist 数据目录存在
-mkdir -p "$HOME/alist-data"
+# 确保 Alist 数据目录存在并修复权限
+mkdir -p "$DATA_DIR"
+chmod -R 755 "$DATA_DIR"
 
 # 3. 生成 PM2 配置文件
 echo "⚙️ 生成 PM2 任务配置..."
@@ -97,6 +99,17 @@ sleep 3
 # 7. 检查 Alist 状态 (关键修复)
 if pm2 list | grep "alist" | grep -q "online"; then
     echo "✅ Alist 启动成功"
+    
+    echo "-----------------------------------"
+    echo "🔑 获取 Alist 登录信息..."
+    # 使用正确的 --data 参数查询密码
+    ADMIN_INFO=$("$HOME/bin/alist" admin --data "$DATA_DIR" 2>/dev/null)
+    
+    if [ -n "$ADMIN_INFO" ]; then
+        echo "$ADMIN_INFO"
+    else
+        echo "⚠️ 无法自动获取密码，请尝试运行: ./set_pass.sh 123456"
+    fi
 else
     echo "❌ Alist 启动失败！"
     echo "📋 正在读取 Alist 错误日志:"
@@ -110,5 +123,5 @@ fi
 echo "-----------------------------------"
 echo "🚀 服务已在后台运行"
 echo "-----------------------------------"
-echo "❓ 如果 Cloudflare 报错 1033，说明 Alist 未启动，请检查上方日志。"
+echo "👉 修改密码请运行: ./set_pass.sh 新密码"
 echo "-----------------------------------"

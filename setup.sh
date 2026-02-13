@@ -60,9 +60,21 @@ if [ ! -f "$CLOUDFLARED_BIN" ]; then
     # Cloudflare 一般较稳定，暂不配置多源
     wget -O "$CLOUDFLARED_BIN" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-${CF_ARCH}"
     chmod +x "$CLOUDFLARED_BIN"
-    echo "✅ Cloudflared 安装完成"
+    echo "✅ Cloudflared 下载完成"
 else
     echo "✅ Cloudflared 已存在 ($CLOUDFLARED_BIN)"
+fi
+
+# 验证 Cloudflared 二进制
+echo "🧪 验证 Cloudflared 运行..."
+if "$CLOUDFLARED_BIN" --version > /dev/null 2>&1; then
+    echo "✅ Cloudflared 运行正常！"
+else
+    echo "⚠️  Cloudflared 运行失败 (架构不匹配或文件损坏)"
+    echo "尝试删除并重新运行 setup..."
+    rm -f "$CLOUDFLARED_BIN"
+    # 如果是第一次运行失败，可以考虑这里不强制退出，或者提醒用户
+    echo "❌ 请尝试重新运行 ./setup.sh 下载正确版本。"
 fi
 
 # --- 2. 配置 Alist (官方源) ---

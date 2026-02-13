@@ -51,21 +51,25 @@ def get_public_url():
         if not url.startswith("http"): url = "https://" + url
         return url
     if TUNNEL_MODE == "quick":
-        try:
-            # 读取 Cloudflared 日志文件获取链接
-            log_path = os.path.join(HOME_DIR, ".pm2", "logs", "tunnel-out.log")
-            if os.path.exists(log_path):
-                # 读取最后 2KB 内容
-                with open(log_path, 'rb') as f:
-                    try:
-                        f.seek(-2048, 2)
-                    except OSError:
-                        f.seek(0)
-                    logs = f.read().decode('utf-8', errors='ignore')
-                    
-                urls = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', logs)
-                if urls: return urls[-1]
-        except Exception: pass
+        # Cloudflared 的 Quick Tunnel URL 通常打印在 stderr 中 (tunnel-error.log)
+        # 我们同时检查 error 和 out 日志
+        log_files = ["tunnel-error.log", "tunnel-out.log"]
+        
+        for log_file in log_files:
+            try:
+                log_path = os.path.join(HOME_DIR, ".pm2", "logs", log_file)
+                if os.path.exists(log_path):
+                    # 读取最后 4KB 内容
+                    with open(log_path, 'rb') as f:
+                        try:
+                            f.seek(-4096, 2)
+                        except OSError:
+                            f.seek(0)
+                        logs = f.read().decode('utf-8', errors='ignore')
+                        
+                    urls = re.findall(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', logs)
+                    if urls: return urls[-1]
+            except Exception: pass
     return None
 
 def get_disk_usage():
