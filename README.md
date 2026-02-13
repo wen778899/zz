@@ -10,6 +10,20 @@
 *   ⬇️ **离线下载**: 集成 Aria2，支持 http/ftp/magnet 下载。
 *   🔄 **自动更新**: 代码推送到 GitHub，手机端自动同步升级。
 
+## ⚠️ 关键设置 (Android 12+)
+
+Android 12 及更高版本有名为 "Phantom Process Killer" 的机制，会在后台杀掉 Termux 的子进程（导致 Alist/Bot 运行一会就停止）。
+
+**解决方法 (二选一):**
+
+1.  **使用 ADB (推荐)**:
+    连接电脑或使用无线调试，执行：
+    ```bash
+    adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
+    ```
+2.  **使用 Termux:Boot**:
+    安装 Termux:Boot 插件应用，并授予自启动权限。
+
 ## 🛠️ 安装教程
 
 1.  **下载 Termux**: 建议从 F-Droid 下载最新版。
@@ -49,5 +63,4 @@
 *   `~/bin/`: 存放 alist 和 cloudflared 二进制文件
 *   `~/.aria2/`: Aria2 配置文件
 *   `~/downloads/`: 默认下载目录
-*   `~/.pm2/logs/`: 日志文件
-
+*   `bot/requirements.txt`: Python 依赖列表

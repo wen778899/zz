@@ -24,10 +24,13 @@ logger = logging.getLogger(__name__)
 
 async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling an update:", exc_info=context.error)
-    # 简单的错误通知，不泄露过多细节
     if ADMIN_ID:
-        await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 Bot 发生错误: {context.error}")
+        try:
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 Bot 发生错误: {context.error}")
+        except:
+            pass
 
+# --- 定时任务 ---
 LAST_SERVICE_STATUS = {}
 async def monitor_services_job(context: ContextTypes.DEFAULT_TYPE):
     global LAST_SERVICE_STATUS
@@ -40,8 +43,13 @@ async def monitor_services_job(context: ContextTypes.DEFAULT_TYPE):
              alerts.append(f"✅ 服务已恢复: `{svc}`")
     LAST_SERVICE_STATUS = current_status
     if alerts and ADMIN_ID:
-        alert_msg = "🔔 *系统监控报告*\n\n" + "\n".join(alerts)
-        await context.bot.send_message(chat_id=ADMIN_ID, text=alert_msg, parse_mode=ParseMode.MARKDOWN)
+        try:
+            alert_msg = "🔔 *系统监控报告*\n\n" + "\n".join(alerts)
+            await context.bot.send_message(chat_id=ADMIN_ID, text=alert_msg, parse_mode=ParseMode.MARKDOWN)
+        except:
+            pass
+
+# --- 命令处理器 ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_auth(update.effective_user.id): return
@@ -50,6 +58,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_main_menu(update: Update):
     markup = ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
     await update.message.reply_text("🤖 *Termux 控制台*", reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
+
+async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_auth(update.effective_user.id): return
+    if not context.args: 
+        await update.message.reply_text("用法: `/dl http://example.com/file.zip`", parse_mode=ParseMode.MARKDOWN)
+        return
+    success, msg = add_aria2_task(context.args[0])
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+
+async def trigger_stream(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not check_auth(update.effective_user.id): return
+    if not context.args:
+        await update.message.reply_text("用法: `/stream /path/to/video.mp4`")
+        return
+    base_url = get_public_url()
+    if not base_url:
+        await update.message.reply_text("❌ 隧道未启动，无法生成外网链接")
+        return
+    success, msg, _ = trigger_stream_action(base_url, " ".join(context.args))
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+
+# --- 消息处理器 ---
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not check_auth(update.effective_user.id): return
@@ -67,6 +97,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "📉 GitHub 用量": await send_usage_stats(update, context)
     elif text == "❓ 帮助": await send_help(update, context)
     elif text == "🔙 返回主菜单": await start(update, context)
+
+# --- 辅助函数 ---
 
 async def show_admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = ReplyKeyboardMarkup(ADMIN_MENU, resize_keyboard=True)
@@ -93,9 +125,9 @@ async def send_tunnel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"☁️ *Cloudflare:* `{url if url else 'N/A'}`", parse_mode=ParseMode.MARKDOWN)
 
 async def restart_services(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⏳ 正在重启服务...")
-    success, msg = restart_pm2_services()
-    await update.message.reply_text(msg)
+    await update.message.reply_text("⏳ 正在重启服务... (Bot 可能会短暂离线)")
+    # 这里 PM2 重启会导致 Bot 进程也重启，所以消息发完可能就断了，正常现象
+    restart_pm2_services()
 
 async def send_admin_pass(update: Update, context: ContextTypes.DEFAULT_TYPE):
     res = get_admin_pass()
@@ -133,26 +165,6 @@ async def send_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "2. *离线下载*: 使用 `/dl` 命令添加任务，使用 '📥 任务' 查看进度。\n"
         "3. *直播推流*: 确保 `~/.env` 配置了 `TG_RTMP_URL`。\n"
         "4. *自动更新*: 修改 GitHub 代码后，Bot 会自动同步并重启。\n"
-        "5. *日志*: 遇到问题点击 '📝 日志' 获取详细报错文件。"
+        "5. *保活*: 请勿在多任务界面划掉 Termux，建议开启唤醒锁。"
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
-
-async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not check_auth(update.effective_user.id): return
-    if not context.args: 
-        await update.message.reply_text("用法: `/dl http://example.com/file.zip`", parse_mode=ParseMode.MARKDOWN)
-        return
-    success, msg = add_aria2_task(context.args[0])
-    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
-
-async def trigger_stream(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not check_auth(update.effective_user.id): return
-    if not context.args:
-        await update.message.reply_text("用法: `/stream /path/to/video.mp4`")
-        return
-    base_url = get_public_url()
-    if not base_url:
-        await update.message.reply_text("❌ 隧道未启动，无法生成外网链接")
-        return
-    success, msg, _ = trigger_stream_action(base_url, " ".join(context.args))
-    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
