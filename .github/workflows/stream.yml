@@ -36,8 +36,20 @@ jobs:
       run: |
         echo "🔍 正在检查视频链接连通性..."
         echo "URL: $VIDEO_URL"
-        # 尝试获取 Header，超时时间 10秒。失败不阻断流程，交由 FFmpeg 重试。
-        curl -I -L --max-time 10 "$VIDEO_URL" || echo "⚠️ Curl 检查失败 (可能是 530)，准备启动 FFmpeg 自动重连模式..."
+        
+        # 使用 curl 检查响应头，如果失败打印完整信息以便调试 (解决 530 问题排查)
+        # -I: 仅头信息
+        # -L: 跟随重定向
+        # --fail: 遇到错误码返回非零
+        if curl -I -L --fail --connect-timeout 10 "$VIDEO_URL"; then
+            echo "✅ 链接可用"
+        else
+            echo "⚠️  Curl 检查失败，尝试获取详细响应以排查错误 (如 530/404)..."
+            curl -v -L --connect-timeout 10 "$VIDEO_URL" || true
+            echo "----------------------------------------"
+            echo "⚠️ 注意: 如果看到 'Origin DNS Error' (530)，说明 Tunnel 域名失效或 Termux 端服务未运行。"
+            echo "----------------------------------------"
+        fi
 
     - name: Start Streaming
       env:
@@ -61,24 +73,23 @@ jobs:
         CMD=(ffmpeg -re)
         
         # --- 网络抗波动配置 (关键) ---
-        # 1. 基础重连
         CMD+=(-reconnect 1)
         CMD+=(-reconnect_at_eof 1)
         CMD+=(-reconnect_streamed 1)
-        
-        # 2. 针对 HTTP 错误 (如 Cloudflare 530/502) 强制重连
         CMD+=(-reconnect_on_http_error 4xx,5xx)
-        
-        # 3. 增加重连延时容忍度 (30秒)
         CMD+=(-reconnect_delay_max 30)
+        
+        # 增加协议白名单
+        CMD+=(-protocol_whitelist file,http,https,tcp,tls,crypto)
         
         CMD+=(-rw_timeout 15000000)
         CMD+=(-user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
 
-        # 鉴权 Headers
+        # 鉴权 Headers (修复 No trailing CRLF warning)
         if [[ -n "$ALIST_TOKEN" ]]; then
            echo "🔑 检测到 Token，已注入 Headers"
-           CMD+=(-headers "Authorization: $ALIST_TOKEN")
+           # 确保 Header 格式正确，添加换行符
+           CMD+=(-headers $'Authorization: '"$ALIST_TOKEN"$'\r\n')
         fi
 
         # 输入与输出

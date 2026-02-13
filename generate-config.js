@@ -51,6 +51,7 @@ if (!fs.existsSync(alistDataDir)) {
 
 // 4. 解析配置
 // 添加 --edge-ip-version 4 强制 IPv4，提高稳定性
+// 关键: 指向 localhost 而不是 127.0.0.1 有时在 proot 下更好，但保持 127.0.0.1 通常更明确
 let tunnelArgs = ['tunnel', '--url', 'http://127.0.0.1:5244', '--no-autoupdate', '--protocol', 'http2', '--edge-ip-version', '4', '--metrics', '127.0.0.1:49500'];
 
 const envPath = path.join(HOME, '.env');
@@ -84,43 +85,53 @@ try {
   console.error("⚠️ 读取 .env 失败，将使用默认配置:", error);
 }
 
-// 5. 定义 Cloudflared App 配置
+// 5. 定义 App 配置
+// Alist
+const alistApp = {
+  name: "alist",
+  script: path.join(HOME, "bin/alist"),
+  args: ["server", "--data", alistDataDir],
+  cwd: alistDataDir,
+  interpreter: "none",
+  autorestart: true,
+  restart_delay: 5000,
+  max_restarts: 10,
+};
+
+// Cloudflared
 const cloudflaredApp = {
     name: "tunnel",
     script: path.join(HOME, "bin/cloudflared"),
     args: tunnelArgs,
-    interpreter: "none", // ⚡️ 关键修改: 告诉 PM2 这是一个二进制文件，不要用 Node 执行
+    interpreter: "none",
     autorestart: true,
     restart_delay: 5000,
     max_restarts: 10
 };
 
 // 如果在 Termux 下，使用 termux-chroot 启动
+// ⚡️ 核心修改: 将 Alist 和 Tunnel 都放入 proot 环境，确保网络环境一致
 if (useProot) {
-    cloudflaredApp.script = termuxChrootPath; // 使用找到的完整路径
-    cloudflaredApp.interpreter = "bash";      // ⚡️ 关键修改: termux-chroot 是 Shell 脚本，使用 Bash 执行
-    // 注意: args 的第一个参数必须是实际执行的二进制路径
+    // Alist
+    alistApp.script = termuxChrootPath;
+    alistApp.interpreter = "bash";
+    alistApp.args = [path.join(HOME, "bin/alist"), "server", "--data", alistDataDir];
+
+    // Tunnel
+    cloudflaredApp.script = termuxChrootPath;
+    cloudflaredApp.interpreter = "bash";
     cloudflaredApp.args = [path.join(HOME, "bin/cloudflared"), ...tunnelArgs];
 }
 
 // 6. 最终 PM2 配置
 const config = {
   apps: [
-    {
-      name: "alist",
-      script: path.join(HOME, "bin/alist"),
-      args: ["server", "--data", alistDataDir],
-      cwd: alistDataDir,
-      interpreter: "none", // Alist 也是二进制
-      autorestart: true,
-      restart_delay: 5000,
-      max_restarts: 10,
-    },
+    alistApp,
     {
       name: "aria2",
       script: "aria2c",
       args: [`--conf-path=${path.join(HOME, ".aria2/aria2.conf")}`],
-      interpreter: "none", // Aria2 也是二进制
+      interpreter: "none", 
       autorestart: true,
       restart_delay: 5000,
     },
@@ -129,7 +140,7 @@ const config = {
       script: pythonExec,
       args: ["-u", "-m", "bot.main"],
       cwd: __dirname,
-      interpreter: "none", // Python 解释器通常作为 script 传入，这里设为 none 以防万一，但 PM2 对 python 处理较好
+      interpreter: "none",
       autorestart: true,
       restart_delay: 3000,
       env: {
