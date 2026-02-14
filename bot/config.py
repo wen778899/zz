@@ -80,6 +80,10 @@ def validate_config():
 
 def check_auth(user_id):
     if not ADMIN_ID: return True
-    # 转换为字符串并去除可能的空白，防止配置错误
-    clean_admin = str(ADMIN_ID).strip()
-    return str(user_id) == clean_admin
+    # 转换为字符串，去除注释(如 #xxx) 和空白
+    try:
+        clean_admin = str(ADMIN_ID).split('#')[0].strip()
+        if not clean_admin: return True # 如果去掉注释为空，视为未配置
+        return str(user_id) == clean_admin
+    except:
+        return False

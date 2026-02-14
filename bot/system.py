@@ -35,14 +35,17 @@ def check_services_health():
     
     # 如果端口没通，尝试兜底用进程名查一次 (兼容部分特殊情况)
     if not all(status.values()):
-        for proc in psutil.process_iter(['name', 'cmdline']):
-            try:
-                name = proc.info['name'] or ""
-                cmdline = " ".join(proc.info['cmdline'] or [])
-                if not status['alist'] and ('alist' in name or 'alist' in cmdline): status['alist'] = True
-                if not status['aria2c'] and ('aria2c' in name or 'aria2c' in cmdline): status['aria2c'] = True
-                if not status['cloudflared'] and ('cloudflared' in name or 'cloudflared' in cmdline): status['cloudflared'] = True
-            except (psutil.NoSuchProcess, psutil.AccessDenied): continue
+        try:
+            for proc in psutil.process_iter(['name', 'cmdline']):
+                try:
+                    name = proc.info['name'] or ""
+                    cmdline = " ".join(proc.info['cmdline'] or [])
+                    if not status['alist'] and ('alist' in name or 'alist' in cmdline): status['alist'] = True
+                    if not status['aria2c'] and ('aria2c' in name or 'aria2c' in cmdline): status['aria2c'] = True
+                    if not status['cloudflared'] and ('cloudflared' in name or 'cloudflared' in cmdline): status['cloudflared'] = True
+                except (psutil.NoSuchProcess, psutil.AccessDenied): continue
+        except Exception: 
+            pass # 忽略 psutil 错误
             
     return status
 
@@ -87,8 +90,13 @@ def get_system_stats():
     msg += f"\n{'✅' if health['aria2c'] else '❌'} `aria2c`"
     msg += f"\n{'✅' if health['cloudflared'] else '❌'} `tunnel`"
     
-    cpu = psutil.cpu_percent()
-    ram = psutil.virtual_memory().percent
+    try:
+        cpu = psutil.cpu_percent()
+        ram = psutil.virtual_memory().percent
+    except:
+        cpu = 0
+        ram = 0
+
     disk_str, disk_percent = get_disk_usage()
     
     msg += f"\n\n🔥 CPU: `{cpu}%`"

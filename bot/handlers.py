@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import math
+import asyncio
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode
@@ -35,6 +36,20 @@ def escape_md(text):
 def escape_text(text):
     if not text: return ""
     return str(text).replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+
+async def ensure_auth(update: Update):
+    """验证权限并发送提示"""
+    user_id = update.effective_user.id
+    if check_auth(user_id):
+        return True
+    
+    # 仅对 Start 命令或私聊发送拒绝提示，避免在群组刷屏
+    if update.message and (update.message.text == "/start" or update.effective_chat.type == "private"):
+        await update.message.reply_text(
+            f"⛔️ <b>无权访问</b>\n您的 ID: <code>{user_id}</code>\n请在 <code>.env</code> 中配置 ADMIN_ID",
+            parse_mode=ParseMode.HTML
+        )
+    return False
 
 # --- 推流核心逻辑 (提前定义以供调用) ---
 
@@ -92,7 +107,9 @@ async def trigger_stream_logic(update: Update, context: ContextTypes.DEFAULT_TYP
     # 发送状态提示
     status_msg = await context.bot.send_message(chat_id=chat_id, text="⏳ 正在请求 GitHub Action...")
     
-    success, msg, _ = trigger_stream_action(base_url, path, target_rtmp, extra_payload)
+    # ⚡️ 异步执行阻塞的 GitHub API 请求
+    loop = asyncio.get_running_loop()
+    success, msg, _ = await loop.run_in_executor(None, lambda: trigger_stream_action(base_url, path, target_rtmp, extra_payload))
     
     # 删除状态提示，发送最终结果
     try:
@@ -117,7 +134,9 @@ ITEMS_PER_PAGE = 10
 
 async def render_browser(update: Update, context: ContextTypes.DEFAULT_TYPE, path="/", page=0, edit_msg=False):
     try:
-        files, err = fetch_file_list(path, page=1, per_page=200) 
+        # ⚡️ 异步执行阻塞的 Alist API 请求
+        loop = asyncio.get_running_loop()
+        files, err = await loop.run_in_executor(None, fetch_file_list, path, 1, 200)
         
         if err:
             safe_path = escape_md(path)
@@ -353,14 +372,14 @@ async def browser_callback_handler(update: Update, context: ContextTypes.DEFAULT
         except: pass
 
 async def browser_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not check_auth(update.effective_user.id): return
+    if not await ensure_auth(update): return
     path = context.args[0] if context.args else "/"
     await render_browser(update, context, path, 0, False)
 
 # --- 命令处理器 ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not check_auth(update.effective_user.id): return
+    if not await ensure_auth(update): return
     await show_main_menu(update)
 
 async def show_main_menu(update: Update):
@@ -368,7 +387,7 @@ async def show_main_menu(update: Update):
     await update.message.reply_text("🤖 *Termux 控制台*", reply_markup=markup, parse_mode=ParseMode.MARKDOWN)
 
 async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not check_auth(update.effective_user.id): return
+    if not await ensure_auth(update): return
     if not context.args: 
         await update.message.reply_text("用法: `/dl http://url`", parse_mode=ParseMode.MARKDOWN)
         return
@@ -377,7 +396,7 @@ async def download_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 async def trigger_stream(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not check_auth(update.effective_user.id): return
+    if not await ensure_auth(update): return
     args = context.args
     if not args:
         await update.message.reply_text("建议使用「📂 文件」菜单。", parse_mode=ParseMode.MARKDOWN)
@@ -387,7 +406,7 @@ async def trigger_stream(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await trigger_stream_logic(update, context, path, key)
 
 async def add_key_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not check_auth(update.effective_user.id): return
+    if not await ensure_auth(update): return
     args = context.args
     if len(args) < 2:
         await update.message.reply_text("用法: `/addkey <名称> <密钥>`", parse_mode=ParseMode.MARKDOWN)
@@ -396,13 +415,13 @@ async def add_key_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ 已保存: `{escape_md(args[0])}`", parse_mode=ParseMode.MARKDOWN)
 
 async def del_key_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not check_auth(update.effective_user.id): return
+    if not await ensure_auth(update): return
     if not context.args: return
     if delete_key(context.args[0]):
         await update.message.reply_text(f"🗑 已删除: `{escape_md(context.args[0])}`", parse_mode=ParseMode.MARKDOWN)
 
 async def list_keys_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not check_auth(update.effective_user.id): return
+    if not await ensure_auth(update): return
     keys = get_all_keys()
     base_rtmp = TG_RTMP_URL_ENV or "❌ 未配置"
     msg = f"📺 *推流配置:*\n🔗 Base: `{escape_md(base_rtmp)}`\n\n"
@@ -413,7 +432,8 @@ async def list_keys_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not check_auth(update.effective_user.id): return
+    # 对普通消息，权限不足时默认静默，避免刷屏 (ensure_auth 内部处理了 /start 提示)
+    if not await ensure_auth(update): return
     text = update.message.text
     
     if text == "📂 文件": await browser_command(update, context)
